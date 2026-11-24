@@ -45,21 +45,12 @@ header .container {
   padding-bottom: 0;
 }
 .brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-weight: 700;
-  font-size: 18px;
-}
-.brand-logo {
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  color: #fff;
-  display: grid;
-  place-items: center;
-  font-size: 14px;
+  font-weight: 800;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
 }
 nav { display: flex; gap: 4px; }
 nav a {
@@ -318,6 +309,18 @@ kbd {
 }
 @media (max-width: 640px) {
   .container { padding: 0 16px 48px; }
+  header .container { height: 56px; }
+  .brand { font-size: 18px; }
+  .header-right { gap: 2px; }
+  nav { gap: 2px; }
+  nav a { padding: 7px 10px; font-size: 14px; }
+  .icon-btn { width: 34px; height: 34px; }
+  .page-head { margin: 24px 0 18px; }
+  .page-head h1 { font-size: 24px; }
+  .page-head .toolbar { width: 100%; }
+  .page-head .toolbar button { flex: 1; justify-content: center; }
+  .panel { padding: 20px; }
+  .modal { padding: 24px; }
   .grid { grid-template-columns: 1fr; }
   .form-row { grid-template-columns: 1fr; }
   .flip { height: 400px; }
@@ -332,3 +335,13 @@ kbd {
 .error { color: var(--danger); font-size: 14px; margin: 14px 0 0; }
 button:disabled { opacity: 0.6; cursor: default; }
 .header-right { display: flex; align-items: center; gap: 8px; }
+.icon-btn {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  justify-content: center;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 10px;
+}
+.icon-btn:hover { background: #fdecec; color: var(--danger); box-shadow: none; }
