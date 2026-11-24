@@ -12,10 +12,13 @@
   <header>
     <div class="container">
       <div class="brand"><span class="brand-logo">BQ</span> Interview Flashcards</div>
+      <div class="header-right">
       <nav>
         <a href="index.html" class="active">Questions</a>
         <a href="add.html">Add &amp; Manage</a>
       </nav>
+      <button class="ghost" id="signOutBtn">Sign out</button>
+      </div>
     </div>
   </header>
 
@@ -78,13 +81,15 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="config.js"></script>
   <script src="app.js"></script>
   <script>
-    var cards = loadCards();
+    var cards = [];
     var activeCategory = "";
     var practiceCards = [];
     var current = 0;
-    var openIndex = -1;
+    var openCard = null;
 
     var grid = document.getElementById("grid");
     var chips = document.getElementById("chips");
@@ -115,7 +120,7 @@
       }
       grid.innerHTML = list.map(function (c, i) {
         var answered = hasAnswer(c);
-        return '<div class="q-card" data-index="' + cards.indexOf(c) + '">' +
+        return '<div class="q-card" data-id="' + c.id + '">' +
           '<div class="card-top">' +
             (c.category ? '<span class="tag">' + escapeHtml(c.category) + '</span>' : '<span></span>') +
             '<span class="num">#' + (i + 1) + '</span>' +
@@ -141,8 +146,8 @@
     grid.addEventListener("click", function (e) {
       var card = e.target.closest(".q-card");
       if (!card) return;
-      openIndex = Number(card.getAttribute("data-index"));
-      var c = cards[openIndex];
+      var id = Number(card.getAttribute("data-id"));
+      var c = openCard = cards.find(function (x) { return x.id === id; });
       var tag = document.getElementById("modalTag");
       tag.textContent = c.category;
       tag.classList.toggle("hidden", !c.category);
@@ -155,7 +160,7 @@
     document.getElementById("modalClose").addEventListener("click", closeModal);
     modal.addEventListener("click", function (e) { if (e.target === modal) closeModal(); });
     document.getElementById("modalEdit").addEventListener("click", function () {
-      location.href = "add.html?edit=" + openIndex;
+      location.href = "add.html?edit=" + openCard.id;
     });
 
     // Practice mode
@@ -217,8 +222,16 @@
       if (e.key === "ArrowLeft") prev();
     });
 
-    renderChips();
-    renderGrid();
+    document.getElementById("signOutBtn").addEventListener("click", signOut);
+
+    async function init() {
+      if (!(await requireLogin())) return;
+      grid.innerHTML = '<div class="empty">Loading questions...</div>';
+      cards = await loadCards();
+      renderChips();
+      renderGrid();
+    }
+    init();
   </script>
 </body>
 </html>

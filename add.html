@@ -12,10 +12,13 @@
   <header>
     <div class="container">
       <div class="brand"><span class="brand-logo">BQ</span> Interview Flashcards</div>
+      <div class="header-right">
       <nav>
         <a href="index.html">Questions</a>
         <a href="add.html" class="active">Add &amp; Manage</a>
       </nav>
+      <button class="ghost" id="signOutBtn">Sign out</button>
+      </div>
     </div>
   </header>
 
@@ -58,6 +61,7 @@
         <p id="count"></p>
       </div>
       <div class="toolbar">
+        <button type="button" class="secondary hidden" id="localImportBtn">Import from this browser</button>
         <button type="button" class="secondary" id="importBtn">Import backup</button>
         <button type="button" class="secondary" id="exportBtn">Export backup (JSON)</button>
         <input type="file" id="importFile" accept=".json" class="hidden">
@@ -66,22 +70,31 @@
     <div class="grid" id="manageList"></div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="config.js"></script>
   <script src="app.js"></script>
   <script>
-    var cards = loadCards();
-    var editingIndex = -1; // -1 means adding a new question, otherwise the index being edited
+    var cards = [];
+    var editingId = null; // null means adding a new question, otherwise the id being edited
+    var OLD_STORAGE_KEY = "bq_cards"; // where the previous version kept questions in this browser
 
     var form = document.getElementById("form");
     var qInput = document.getElementById("question");
     var cInput = document.getElementById("category");
     var aInput = document.getElementById("answer");
+    var saveBtn = document.getElementById("saveBtn");
+
+    async function reload() {
+      cards = await loadCards();
+      render();
+    }
 
     function render() {
       document.getElementById("categoryList").innerHTML = getCategories(cards).map(function (cat) {
         return '<option value="' + escapeHtml(cat) + '">';
       }).join("");
 
-      document.getElementById("count").textContent = cards.length + " questions saved in this browser";
+      document.getElementById("count").textContent = cards.length + " questions saved in your database";
 
       var list = document.getElementById("manageList");
       if (cards.length === 0) {
@@ -99,61 +112,62 @@
           '<div class="foot">' +
             '<span class="status-dot' + (answered ? '' : ' todo') + '">' + (answered ? 'Answered' : 'To prepare') + '</span>' +
             '<span>' +
-              '<button class="ghost" data-edit="' + i + '">Edit</button>' +
-              '<button class="ghost danger" data-delete="' + i + '">Delete</button>' +
+              '<button class="ghost" data-edit="' + c.id + '">Edit</button>' +
+              '<button class="ghost danger" data-delete="' + c.id + '">Delete</button>' +
             '</span>' +
           '</div>' +
         '</div>';
       }).join("");
     }
 
-    function startEdit(index) {
-      var c = cards[index];
+    function startEdit(id) {
+      var c = cards.find(function (x) { return x.id === id; });
       if (!c) return;
-      editingIndex = index;
+      editingId = id;
       qInput.value = c.question;
       cInput.value = c.category || "";
       aInput.value = c.answer || "";
       document.getElementById("formTitle").textContent = "Edit Question";
-      document.getElementById("saveBtn").textContent = "Update question";
+      saveBtn.textContent = "Update question";
       document.getElementById("cancelBtn").classList.remove("hidden");
       window.scrollTo({ top: 0, behavior: "smooth" });
       qInput.focus();
     }
 
     function resetForm() {
-      editingIndex = -1;
+      editingId = null;
       form.reset();
       document.getElementById("formTitle").textContent = "Add a Question";
-      document.getElementById("saveBtn").textContent = "Save question";
+      saveBtn.textContent = "Save question";
       document.getElementById("cancelBtn").classList.add("hidden");
     }
 
-    form.addEventListener("submit", function (e) {
+    form.addEventListener("submit", async function (e) {
       e.preventDefault();
       var card = {
         question: qInput.value.trim(),
         category: cInput.value.trim(),
         answer: aInput.value
       };
-      if (editingIndex === -1) cards.push(card);
-      else cards[editingIndex] = card;
-      saveCards(cards);
-      showToast(editingIndex === -1 ? "Question added" : "Question updated");
+      saveBtn.disabled = true;
+      var result = editingId === null ? await addCards([card]) : await updateCard(editingId, card);
+      saveBtn.disabled = false;
+      if (result.error) return showToast("Save failed: " + result.error.message);
+      showToast(editingId === null ? "Question added" : "Question updated");
       resetForm();
-      render();
+      reload();
     });
 
-    document.getElementById("manageList").addEventListener("click", function (e) {
+    document.getElementById("manageList").addEventListener("click", async function (e) {
       var edit = e.target.getAttribute("data-edit");
       var del = e.target.getAttribute("data-delete");
       if (edit !== null) startEdit(Number(edit));
       if (del !== null && confirm("Delete this question?")) {
-        cards.splice(Number(del), 1);
-        saveCards(cards);
-        resetForm();
-        render();
+        var result = await deleteCard(Number(del));
+        if (result.error) return showToast("Delete failed: " + result.error.message);
+        if (editingId === Number(del)) resetForm();
         showToast("Question deleted");
+        reload();
       }
     });
 
@@ -165,9 +179,41 @@
       aInput.focus();
     });
 
-    // Export: download a JSON file you can import on another computer or browser
+    // Import a list of questions into the database (added on top of the existing ones)
+    async function importCards(list) {
+      if (!confirm("Add " + list.length + " questions to your database?")) return false;
+      var result = await addCards(list);
+      if (result.error) { showToast("Import failed: " + result.error.message); return false; }
+      showToast("Imported " + list.length + " questions");
+      reload();
+      return true;
+    }
+
+    // One-off move of questions saved by the previous (browser-only) version
+    function readOldBrowserCards() {
+      try {
+        var data = JSON.parse(localStorage.getItem(OLD_STORAGE_KEY));
+        return Array.isArray(data) && data.length ? data : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    var localImportBtn = document.getElementById("localImportBtn");
+    if (readOldBrowserCards()) localImportBtn.classList.remove("hidden");
+    localImportBtn.addEventListener("click", async function () {
+      if (await importCards(readOldBrowserCards())) {
+        localStorage.removeItem(OLD_STORAGE_KEY);
+        localImportBtn.classList.add("hidden");
+      }
+    });
+
+    // Export: download a JSON backup of everything in the database
     document.getElementById("exportBtn").addEventListener("click", function () {
-      var blob = new Blob([JSON.stringify(cards, null, 2)], { type: "application/json" });
+      var data = cards.map(function (c) {
+        return { question: c.question, category: c.category, answer: c.answer };
+      });
+      var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       var a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = "bq-backup.json";
@@ -186,12 +232,7 @@
         try {
           var data = JSON.parse(reader.result);
           if (!Array.isArray(data)) throw new Error();
-          if (!confirm("Importing will replace all current questions with " + data.length + " from the file. Continue?")) return;
-          cards = data;
-          saveCards(cards);
-          resetForm();
-          render();
-          showToast("Imported " + data.length + " questions");
+          importCards(data);
         } catch (err) {
           alert("This file is not a valid backup.");
         }
@@ -200,11 +241,17 @@
       e.target.value = "";
     });
 
-    render();
+    document.getElementById("signOutBtn").addEventListener("click", signOut);
 
-    // Opened from the Questions page with ?edit=N
-    var match = location.search.match(/edit=(\d+)/);
-    if (match) startEdit(Number(match[1]));
+    async function init() {
+      if (!(await requireLogin())) return;
+      document.getElementById("manageList").innerHTML = '<div class="empty">Loading questions...</div>';
+      await reload();
+      // Opened from the Questions page with ?edit=ID
+      var match = location.search.match(/edit=(\d+)/);
+      if (match) startEdit(Number(match[1]));
+    }
+    init();
   </script>
 </body>
 </html>

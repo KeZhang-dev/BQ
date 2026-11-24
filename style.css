@@ -324,3 +324,11 @@ kbd {
   .face { padding: 24px; }
   .face.front .question { font-size: 21px; }
 }
+
+/* ---------- Login page ---------- */
+.login-wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.login { width: 100%; max-width: 400px; }
+.login h1 { font-size: 24px; margin: 0 0 20px; }
+.error { color: var(--danger); font-size: 14px; margin: 14px 0 0; }
+button:disabled { opacity: 0.6; cursor: default; }
+.header-right { display: flex; align-items: center; gap: 8px; }

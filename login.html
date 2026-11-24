@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · BQ Flashcards</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="login-wrap">
+    <form class="panel login" id="form">
+      <div class="brand" style="margin-bottom:20px"><span class="brand-logo">BQ</span> Interview Flashcards</div>
+      <h1>Sign in</h1>
+      <label for="email">Email</label>
+      <input id="email" type="email" required autocomplete="email">
+      <label for="password" style="margin-top:14px">Password</label>
+      <input id="password" type="password" required autocomplete="current-password">
+      <button type="submit" id="submitBtn" style="width:100%;justify-content:center;margin-top:22px">Sign in</button>
+      <p class="error hidden" id="error"></p>
+    </form>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    // Already signed in? Go straight to the questions
+    db.auth.getSession().then(function (result) {
+      if (result.data.session) location.href = "index.html";
+    });
+
+    document.getElementById("form").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var btn = document.getElementById("submitBtn");
+      var error = document.getElementById("error");
+      btn.disabled = true;
+      btn.textContent = "Signing in...";
+      error.classList.add("hidden");
+
+      var result = await db.auth.signInWithPassword({
+        email: document.getElementById("email").value.trim(),
+        password: document.getElementById("password").value
+      });
+
+      if (result.error) {
+        error.textContent = result.error.message;
+        error.classList.remove("hidden");
+        btn.disabled = false;
+        btn.textContent = "Sign in";
+        return;
+      }
+      location.href = "index.html";
+    });
+  </script>
+</body>
+</html>
