@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Add &amp; Manage BQ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <div class="brand"><span class="brand-logo">BQ</span> Interview Flashcards</div>
+      <nav>
+        <a href="index.html">Questions</a>
+        <a href="add.html" class="active">Add &amp; Manage</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="page-head">
+      <div>
+        <h1 id="formTitle">Add a Question</h1>
+        <p>Write your answer using the STAR method: Situation, Task, Action, Result.</p>
+      </div>
+    </div>
+
+    <form id="form" class="panel">
+      <div class="form-row">
+        <div>
+          <label for="question">Question</label>
+          <input id="question" required placeholder="e.g. Tell me about a time you led a project.">
+        </div>
+        <div>
+          <label for="category">Category <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+          <input id="category" list="categoryList" placeholder="e.g. Teamwork, Leadership">
+          <datalist id="categoryList"></datalist>
+        </div>
+      </div>
+
+      <label for="answer">Answer</label>
+      <textarea id="answer" placeholder="Situation: ...&#10;&#10;Task: ...&#10;&#10;Action: ...&#10;&#10;Result: ..."></textarea>
+
+      <div class="form-actions">
+        <button type="button" class="secondary" id="starBtn">+ Insert STAR template</button>
+        <div class="toolbar">
+          <button type="button" class="secondary hidden" id="cancelBtn">Cancel</button>
+          <button type="submit" id="saveBtn">Save question</button>
+        </div>
+      </div>
+    </form>
+
+    <div class="page-head" style="margin-top:56px">
+      <div>
+        <h1 style="font-size:22px">Your Questions</h1>
+        <p id="count"></p>
+      </div>
+      <div class="toolbar">
+        <button type="button" class="secondary" id="importBtn">Import backup</button>
+        <button type="button" class="secondary" id="exportBtn">Export backup (JSON)</button>
+        <input type="file" id="importFile" accept=".json" class="hidden">
+      </div>
+    </div>
+    <div class="grid" id="manageList"></div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    var cards = loadCards();
+    var editingIndex = -1; // -1 means adding a new question, otherwise the index being edited
+
+    var form = document.getElementById("form");
+    var qInput = document.getElementById("question");
+    var cInput = document.getElementById("category");
+    var aInput = document.getElementById("answer");
+
+    function render() {
+      document.getElementById("categoryList").innerHTML = getCategories(cards).map(function (cat) {
+        return '<option value="' + escapeHtml(cat) + '">';
+      }).join("");
+
+      document.getElementById("count").textContent = cards.length + " questions saved in this browser";
+
+      var list = document.getElementById("manageList");
+      if (cards.length === 0) {
+        list.innerHTML = '<div class="empty">No questions yet — add your first one above.</div>';
+        return;
+      }
+      list.innerHTML = cards.map(function (c, i) {
+        var answered = hasAnswer(c);
+        return '<div class="q-card" style="cursor:default">' +
+          '<div class="card-top">' +
+            (c.category ? '<span class="tag">' + escapeHtml(c.category) + '</span>' : '<span></span>') +
+            '<span class="num">#' + (i + 1) + '</span>' +
+          '</div>' +
+          '<div class="q-text">' + escapeHtml(c.question) + '</div>' +
+          '<div class="foot">' +
+            '<span class="status-dot' + (answered ? '' : ' todo') + '">' + (answered ? 'Answered' : 'To prepare') + '</span>' +
+            '<span>' +
+              '<button class="ghost" data-edit="' + i + '">Edit</button>' +
+              '<button class="ghost danger" data-delete="' + i + '">Delete</button>' +
+            '</span>' +
+          '</div>' +
+        '</div>';
+      }).join("");
+    }
+
+    function startEdit(index) {
+      var c = cards[index];
+      if (!c) return;
+      editingIndex = index;
+      qInput.value = c.question;
+      cInput.value = c.category || "";
+      aInput.value = c.answer || "";
+      document.getElementById("formTitle").textContent = "Edit Question";
+      document.getElementById("saveBtn").textContent = "Update question";
+      document.getElementById("cancelBtn").classList.remove("hidden");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      qInput.focus();
+    }
+
+    function resetForm() {
+      editingIndex = -1;
+      form.reset();
+      document.getElementById("formTitle").textContent = "Add a Question";
+      document.getElementById("saveBtn").textContent = "Save question";
+      document.getElementById("cancelBtn").classList.add("hidden");
+    }
+
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var card = {
+        question: qInput.value.trim(),
+        category: cInput.value.trim(),
+        answer: aInput.value
+      };
+      if (editingIndex === -1) cards.push(card);
+      else cards[editingIndex] = card;
+      saveCards(cards);
+      showToast(editingIndex === -1 ? "Question added" : "Question updated");
+      resetForm();
+      render();
+    });
+
+    document.getElementById("manageList").addEventListener("click", function (e) {
+      var edit = e.target.getAttribute("data-edit");
+      var del = e.target.getAttribute("data-delete");
+      if (edit !== null) startEdit(Number(edit));
+      if (del !== null && confirm("Delete this question?")) {
+        cards.splice(Number(del), 1);
+        saveCards(cards);
+        resetForm();
+        render();
+        showToast("Question deleted");
+      }
+    });
+
+    document.getElementById("cancelBtn").addEventListener("click", resetForm);
+
+    document.getElementById("starBtn").addEventListener("click", function () {
+      aInput.value += (aInput.value ? "\n\n" : "") +
+        "Situation: \n\nTask: \n\nAction: \n\nResult: ";
+      aInput.focus();
+    });
+
+    // Export: download a JSON file you can import on another computer or browser
+    document.getElementById("exportBtn").addEventListener("click", function () {
+      var blob = new Blob([JSON.stringify(cards, null, 2)], { type: "application/json" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "bq-backup.json";
+      a.click();
+    });
+
+    document.getElementById("importBtn").addEventListener("click", function () {
+      document.getElementById("importFile").click();
+    });
+
+    document.getElementById("importFile").addEventListener("change", function (e) {
+      var file = e.target.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        try {
+          var data = JSON.parse(reader.result);
+          if (!Array.isArray(data)) throw new Error();
+          if (!confirm("Importing will replace all current questions with " + data.length + " from the file. Continue?")) return;
+          cards = data;
+          saveCards(cards);
+          resetForm();
+          render();
+          showToast("Imported " + data.length + " questions");
+        } catch (err) {
+          alert("This file is not a valid backup.");
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = "";
+    });
+
+    render();
+
+    // Opened from the Questions page with ?edit=N
+    var match = location.search.match(/edit=(\d+)/);
+    if (match) startEdit(Number(match[1]));
+  </script>
+</body>
+</html>

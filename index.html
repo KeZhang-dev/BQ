@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BQ Flashcards</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="container">
+      <div class="brand"><span class="brand-logo">BQ</span> Interview Flashcards</div>
+      <nav>
+        <a href="index.html" class="active">Questions</a>
+        <a href="add.html">Add &amp; Manage</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- List view -->
+    <div id="listView">
+      <div class="page-head">
+        <div>
+          <h1>Behavioural Questions</h1>
+          <p id="stats"></p>
+        </div>
+        <div class="toolbar">
+          <button class="secondary" id="shuffleBtn">Shuffle &amp; Practise</button>
+          <button id="practiceBtn">Start Practice</button>
+        </div>
+      </div>
+      <div class="chips" id="chips"></div>
+      <div class="grid" id="grid"></div>
+    </div>
+
+    <!-- Practice view -->
+    <div id="practiceView" class="practice hidden">
+      <div class="practice-top">
+        <span id="progressText"></span>
+        <button class="ghost" id="exitBtn">&#10005; Exit practice</button>
+      </div>
+      <div class="progress-bar"><div id="progressFill"></div></div>
+
+      <div class="flip" id="flip">
+        <div class="flip-inner">
+          <div class="face front">
+            <div class="label" id="frontLabel">Question</div>
+            <div class="question" id="frontText"></div>
+          </div>
+          <div class="face back">
+            <div class="label">Your answer</div>
+            <div class="answer" id="backText"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hint">Click the card to flip &nbsp;·&nbsp; <kbd>Space</kbd> flip &nbsp;·&nbsp; <kbd>&larr;</kbd> <kbd>&rarr;</kbd> previous / next</div>
+      <div class="toolbar">
+        <button class="secondary" id="prevBtn">&larr; Previous</button>
+        <button id="nextBtn">Next &rarr;</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Question detail modal -->
+  <div class="modal-backdrop hidden" id="modal">
+    <div class="modal">
+      <span class="tag" id="modalTag"></span>
+      <h3 id="modalQuestion"></h3>
+      <div class="answer" id="modalAnswer"></div>
+      <div class="toolbar">
+        <button class="secondary" id="modalEdit">Edit</button>
+        <button id="modalClose">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    var cards = loadCards();
+    var activeCategory = "";
+    var practiceCards = [];
+    var current = 0;
+    var openIndex = -1;
+
+    var grid = document.getElementById("grid");
+    var chips = document.getElementById("chips");
+    var flip = document.getElementById("flip");
+    var modal = document.getElementById("modal");
+
+    function filteredCards() {
+      return cards.filter(function (c) { return !activeCategory || c.category === activeCategory; });
+    }
+
+    function renderChips() {
+      var html = '<button class="chip' + (activeCategory === "" ? " active" : "") + '" data-cat="">All (' + cards.length + ')</button>';
+      getCategories(cards).forEach(function (cat) {
+        html += '<button class="chip' + (activeCategory === cat ? " active" : "") + '" data-cat="' + escapeHtml(cat) + '">' + escapeHtml(cat) + '</button>';
+      });
+      chips.innerHTML = html;
+    }
+
+    function renderGrid() {
+      var done = cards.filter(hasAnswer).length;
+      document.getElementById("stats").textContent =
+        cards.length + " questions · " + done + " answered · " + (cards.length - done) + " to prepare";
+
+      var list = filteredCards();
+      if (list.length === 0) {
+        grid.innerHTML = '<div class="empty">No questions yet. Add one on the <a href="add.html">Add &amp; Manage</a> page.</div>';
+        return;
+      }
+      grid.innerHTML = list.map(function (c, i) {
+        var answered = hasAnswer(c);
+        return '<div class="q-card" data-index="' + cards.indexOf(c) + '">' +
+          '<div class="card-top">' +
+            (c.category ? '<span class="tag">' + escapeHtml(c.category) + '</span>' : '<span></span>') +
+            '<span class="num">#' + (i + 1) + '</span>' +
+          '</div>' +
+          '<div class="q-text">' + escapeHtml(c.question) + '</div>' +
+          '<div class="foot">' +
+            '<span class="status-dot' + (answered ? '' : ' todo') + '">' + (answered ? 'Answered' : 'To prepare') + '</span>' +
+            '<span>View &rarr;</span>' +
+          '</div>' +
+        '</div>';
+      }).join("");
+    }
+
+    chips.addEventListener("click", function (e) {
+      var chip = e.target.closest(".chip");
+      if (!chip) return;
+      activeCategory = chip.getAttribute("data-cat");
+      renderChips();
+      renderGrid();
+    });
+
+    // Detail modal
+    grid.addEventListener("click", function (e) {
+      var card = e.target.closest(".q-card");
+      if (!card) return;
+      openIndex = Number(card.getAttribute("data-index"));
+      var c = cards[openIndex];
+      var tag = document.getElementById("modalTag");
+      tag.textContent = c.category;
+      tag.classList.toggle("hidden", !c.category);
+      document.getElementById("modalQuestion").textContent = c.question;
+      document.getElementById("modalAnswer").textContent = c.answer || "(No answer yet)";
+      modal.classList.remove("hidden");
+    });
+
+    function closeModal() { modal.classList.add("hidden"); }
+    document.getElementById("modalClose").addEventListener("click", closeModal);
+    modal.addEventListener("click", function (e) { if (e.target === modal) closeModal(); });
+    document.getElementById("modalEdit").addEventListener("click", function () {
+      location.href = "add.html?edit=" + openIndex;
+    });
+
+    // Practice mode
+    function startPractice(shuffle) {
+      practiceCards = filteredCards().slice();
+      if (practiceCards.length === 0) return showToast("No questions to practise");
+      if (shuffle) {
+        for (var i = practiceCards.length - 1; i > 0; i--) {
+          var j = Math.floor(Math.random() * (i + 1));
+          var tmp = practiceCards[i]; practiceCards[i] = practiceCards[j]; practiceCards[j] = tmp;
+        }
+      }
+      current = 0;
+      document.getElementById("listView").classList.add("hidden");
+      document.getElementById("practiceView").classList.remove("hidden");
+      showCard();
+    }
+
+    function showCard() {
+      var c = practiceCards[current];
+      flip.classList.remove("flipped");
+      // Wait for the flip-back animation before swapping the answer, so it isn't revealed early
+      setTimeout(function () {
+        document.getElementById("backText").textContent = c.answer || "(No answer yet)";
+      }, 250);
+      document.getElementById("frontLabel").textContent = c.category || "Question";
+      document.getElementById("frontText").textContent = c.question;
+      document.getElementById("progressText").textContent = "Card " + (current + 1) + " of " + practiceCards.length;
+      document.getElementById("progressFill").style.width = ((current + 1) / practiceCards.length * 100) + "%";
+      document.getElementById("nextBtn").innerHTML = current === practiceCards.length - 1 ? "Finish &#10003;" : "Next &rarr;";
+    }
+
+    function next() {
+      if (current < practiceCards.length - 1) { current++; showCard(); }
+      else { showToast("Nice work — you've finished all cards!"); exitPractice(); }
+    }
+
+    function prev() {
+      if (current > 0) { current--; showCard(); }
+    }
+
+    function exitPractice() {
+      document.getElementById("practiceView").classList.add("hidden");
+      document.getElementById("listView").classList.remove("hidden");
+    }
+
+    flip.addEventListener("click", function () { flip.classList.toggle("flipped"); });
+    document.getElementById("nextBtn").addEventListener("click", next);
+    document.getElementById("prevBtn").addEventListener("click", prev);
+    document.getElementById("exitBtn").addEventListener("click", exitPractice);
+    document.getElementById("practiceBtn").addEventListener("click", function () { startPractice(false); });
+    document.getElementById("shuffleBtn").addEventListener("click", function () { startPractice(true); });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") { closeModal(); return; }
+      if (document.getElementById("practiceView").classList.contains("hidden")) return;
+      if (e.key === " ") { e.preventDefault(); flip.classList.toggle("flipped"); }
+      if (e.key === "ArrowRight") next();
+      if (e.key === "ArrowLeft") prev();
+    });
+
+    renderChips();
+    renderGrid();
+  </script>
+</body>
+</html>
